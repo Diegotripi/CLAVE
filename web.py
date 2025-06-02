@@ -8,41 +8,43 @@ import pandas as pd
 import requests
 import streamlit as st
 
-#Para ejecutar este archivo: streamlit run web.py
-
+# Para ejecutar este archivo:  streamlit run web.py
 
 # RECURSOS – logo y fondo oscuro
 
 LOGO_PATH = "logo_clave.png"
-BG_PATH = "dark_background.png"
+BG_PATH   = "dark_background.png"
 
 
 # CONFIGURACIÓN THINGSPEAK
 
-WRITE_API_KEY_USERS = "3UGWIIJ540HY5GMT"
-READ_API_KEY_USERS = "LU6Z7ZBGVF0H49OX"
-ID_CANAL_USERS = "2968196"
+
+WRITE_API_KEY_USERS  = "3UGWIIJ540HY5GMT"
+READ_API_KEY_USERS   = "LU6Z7ZBGVF0H49OX"
+ID_CANAL_USERS       = "2968196"
 
 WRITE_API_KEY_ACCESS = "YE5B61469RDB8F80"
-READ_API_KEY_ACCESS = "Q1DSHLY8CZBBLOG2"
-ID_CANAL_ACCESS = "2977309"
+READ_API_KEY_ACCESS  = "Q1DSHLY8CZBBLOG2"
+ID_CANAL_ACCESS      = "2977309"
 
 BASE_URL = "https://api.thingspeak.com"
-HEADERS = {"Content-Type": "application/x-www-form-urlencoded"}
-TIMEOUT = 8
+HEADERS  = {"Content-Type": "application/x-www-form-urlencoded"}
+TIMEOUT  = 8
 
 
 # UTILIDADES DE IMAGEN / CSS
 
 
+
 def _b64_encode(img_path: str | Path) -> str:
+    """Codifica una imagen a base-64 (cadena vacía si no existe)"""
     data = Path(img_path).read_bytes() if Path(img_path).is_file() else b""
     return base64.b64encode(data).decode()
 
 
 def inject_global_css() -> None:
-    """Aplica fondo, favicon y fuerza todo texto a blanco + negritas."""
-    bg_b64 = _b64_encode(BG_PATH)
+    """Aplica fondo, favicon y fuerza todo texto a blanco + negritas"""
+    bg_b64   = _b64_encode(BG_PATH)
     logo_b64 = _b64_encode(LOGO_PATH)
 
     st.markdown(
@@ -97,8 +99,49 @@ def inject_global_css() -> None:
             unsafe_allow_html=True,
         )
 
+# FUNCIÓN DE AUTENTICACIÓN
+
+
+
+def require_login() -> None:
+    """Muestra una pantalla de inicio de sesión y detiene la app si no ha iniciado sesión"""
+    # Credenciales fijas
+    VALID_USER = "mdet"
+    VALID_PASS = "diego"
+
+    if "authenticated" not in st.session_state:
+        st.session_state["authenticated"] = False
+
+    if st.session_state["authenticated"]:
+        # (opcional) permitir cerrar sesión desde el sidebar
+        if st.sidebar.button("Cerrar sesión"):
+            st.session_state["authenticated"] = False
+            st.experimental_rerun()
+        return  # usuario ya autenticado
+
+    # Caso no autenticado: mostramos formulario
+    st.markdown("""
+    <div style='text-align:center;margin-top:8rem;'>
+        <h2>Identificación de Usuario</h2>
+    </div>""", unsafe_allow_html=True)
+
+    user = st.text_input("Usuario", key="login_user")
+    pwd  = st.text_input("Contraseña", type="password", key="login_pass")
+
+    col1, col2, col3 = st.columns([1,2,1])
+    with col2:
+        if st.button("Acceder", type="primary"):
+            if user == VALID_USER and pwd == VALID_PASS:
+                st.session_state["authenticated"] = True
+                st.rerun()
+            else:
+                st.error("Credenciales inválidas. Intenta de nuevo.")
+
+    st.stop()  # detiene el script para que no se ejecute el resto mientras no se valide
+
 
 # REST CLIENT
+
 
 
 def post_user(user_id: str, name: str, lastname: str, available: int) -> bool:
@@ -152,22 +195,23 @@ def latest_users_dict() -> "OrderedDict[str, Tuple[str, str, int]]":
 def cached_latest_users() -> "OrderedDict[str, Tuple[str, str, int]]":
     return latest_users_dict()
 
-
 @st.cache_data(ttl=30, show_spinner=False)
 def cached_last_accesses(n: int = 30) -> List[dict]:
     return get_last_accesses(n)
 
+
 # PÁGINAS
+
 
 def page_create():
     st.header("Crear nuevo usuario")
     with st.form("frm_create", clear_on_submit=False):
         col1, col2 = st.columns(2)
         with col1:
-            uid = st.text_input("ID", key="create_id")
+            uid  = st.text_input("ID", key="create_id")
             name = st.text_input("Nombre", key="create_name")
         with col2:
-            last = st.text_input("Apellido", key="create_last")
+            last   = st.text_input("Apellido", key="create_last")
             acc_opt = st.radio("Acceso", ["Sí", "No"], horizontal=True, key="create_acc")
         if st.form_submit_button("Crear usuario", type="primary"):
             if not (uid and name and last):
@@ -221,7 +265,7 @@ def page_access():
     if st.button("Actualizar", key="refresh_access"):
         st.cache_data.clear()
 
-    accesses = cached_last_accesses(30)
+    accesses  = cached_last_accesses(30)
     users_map = cached_latest_users()
 
     accesses.sort(key=lambda x: x["created_at"], reverse=True)
@@ -234,9 +278,12 @@ def page_access():
     df = pd.DataFrame(data)
     st.dataframe(df, use_container_width=True, hide_index=True)
 
+
 # MAIN
 
+
 def main():
+    # Configuración general de la página
     st.set_page_config(
         page_title="C.L.A.V.E • Gestión de Usuarios",
         page_icon=LOGO_PATH if Path(LOGO_PATH).is_file() else "🔑",
@@ -245,6 +292,11 @@ def main():
     )
 
     inject_global_css()
+
+    #  Autenticacion
+    require_login()  # detiene el script si el usuario no ha iniciado sesión
+
+    #  Interfaz principal 
 
     if Path(LOGO_PATH).is_file():
         st.image(LOGO_PATH, width=220)
@@ -260,7 +312,6 @@ def main():
         page_users()
     with tabs[3]:
         page_access()
-
 
     st.markdown(
         """<hr style='margin-top:3rem;margin-bottom:1rem;border-top:1px solid #666;'>
